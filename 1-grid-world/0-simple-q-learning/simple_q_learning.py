@@ -71,9 +71,10 @@ class SimpleQLearning:
             available_actions: Array of valid action indices
 
         Returns:
-            Randomly selected action
+            Randomly selected action (int)
         """
-        return int(np.random.choice(available_actions, size=1))
+        # Return scalar directly (NumPy 1.25+ compatible)
+        return int(np.random.choice(available_actions))
 
     def train(self, num_episodes=1000, verbose=True):
         """
