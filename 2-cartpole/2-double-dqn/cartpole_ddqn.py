@@ -4,9 +4,9 @@ import pylab
 import random
 import numpy as np
 from collections import deque
-from keras.layers import Dense
-from keras.optimizers import Adam
-from keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import Sequential
 
 EPISODES = 300
 
@@ -55,7 +55,7 @@ class DoubleDQNAgent:
         model.add(Dense(self.action_size, activation='linear',
                         kernel_initializer='he_uniform'))
         model.summary()
-        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     # after some time interval update the target model to be same with model
@@ -67,7 +67,7 @@ class DoubleDQNAgent:
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
         else:
-            q_value = self.model.predict(state)
+            q_value = self.model.predict(state, verbose=0)
             return np.argmax(q_value[0])
 
     # save sample <s,a,r,s'> to the replay memory
@@ -94,9 +94,9 @@ class DoubleDQNAgent:
             update_target[i] = mini_batch[i][3]
             done.append(mini_batch[i][4])
 
-        target = self.model.predict(update_input)
-        target_next = self.model.predict(update_target)
-        target_val = self.target_model.predict(update_target)
+        target = self.model.predict(update_input, verbose=0)
+        target_next = self.model.predict(update_target, verbose=0)
+        target_val = self.target_model.predict(update_target, verbose=0)
 
         for i in range(self.batch_size):
             # like Q Learning, get maximum Q value at s'
@@ -132,6 +132,8 @@ if __name__ == "__main__":
         done = False
         score = 0
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         state = np.reshape(state, [1, state_size])
 
         while not done:

@@ -2,9 +2,9 @@ import copy
 import pylab
 import numpy as np
 from environment import Env
-from keras.layers import Dense
-from keras.optimizers import Adam
-from keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import Sequential
 from keras import backend as K
 
 EPISODES = 2500
@@ -49,7 +49,7 @@ class ReinforceAgent:
         loss = -K.sum(cross_entropy)
 
         # create training function
-        optimizer = Adam(lr=self.learning_rate)
+        optimizer = Adam(learning_rate=self.learning_rate)
         updates = optimizer.get_updates(self.model.trainable_weights, [],
                                         loss)
         train = K.function([self.model.input, action, discounted_rewards], [],
@@ -59,7 +59,7 @@ class ReinforceAgent:
 
     # get action from policy network
     def get_action(self, state):
-        policy = self.model.predict(state)[0]
+        policy = self.model.predict(state, verbose=0)[0]
         return np.random.choice(self.action_size, 1, p=policy)[0]
 
     # calculate discounted rewards
@@ -101,6 +101,8 @@ if __name__ == "__main__":
         score = 0
         # fresh env
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         state = np.reshape(state, [1, 15])
 
         while not done:

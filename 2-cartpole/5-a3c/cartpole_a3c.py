@@ -4,9 +4,9 @@ import tensorflow as tf
 import pylab
 import time
 import gym
-from keras.layers import Dense, Input
-from keras.models import Model
-from keras.optimizers import Adam
+from tensorflow.keras.layers import Dense, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
 from keras import backend as K
 
 
@@ -86,7 +86,7 @@ class A3CAgent:
 
         actor_loss = loss + 0.01*entropy
 
-        optimizer = Adam(lr=self.actor_lr)
+        optimizer = Adam(learning_rate=self.actor_lr)
         updates = optimizer.get_updates(self.actor.trainable_weights, [], actor_loss)
         train = K.function([self.actor.input, action, advantages], [], updates=updates)
         return train
@@ -99,7 +99,7 @@ class A3CAgent:
 
         loss = K.mean(K.square(discounted_reward - value))
 
-        optimizer = Adam(lr=self.critic_lr)
+        optimizer = Adam(learning_rate=self.critic_lr)
         updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
         train = K.function([self.critic.input, discounted_reward], [], updates=updates)
         return train
@@ -154,6 +154,8 @@ class Agent(threading.Thread):
         env = gym.make(self.env_name)
         while episode < EPISODES:
             state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
             score = 0
             while True:
                 action = self.get_action(state)
@@ -177,7 +179,7 @@ class Agent(threading.Thread):
         discounted_rewards = np.zeros_like(rewards)
         running_add = 0
         if not done:
-            running_add = self.critic.predict(np.reshape(self.states[-1], (1, self.state_size)))[0]
+            running_add = self.critic.predict(np.reshape(self.states[-1], (1, self.state_size, verbose=0)))[0]
         for t in reversed(range(0, len(rewards))):
             running_add = running_add * self.discount_factor + rewards[t]
             discounted_rewards[t] = running_add
@@ -196,7 +198,7 @@ class Agent(threading.Thread):
     def train_episode(self, done):
         discounted_rewards = self.discount_rewards(self.rewards, done)
 
-        values = self.critic.predict(np.array(self.states))
+        values = self.critic.predict(np.array(self.states, verbose=0))
         values = np.reshape(values, len(values))
 
         advantages = discounted_rewards - values
@@ -206,7 +208,7 @@ class Agent(threading.Thread):
         self.states, self.actions, self.rewards = [], [], []
 
     def get_action(self, state):
-        policy = self.actor.predict(np.reshape(state, [1, self.state_size]))[0]
+        policy = self.actor.predict(np.reshape(state, [1, self.state_size], verbose=0))[0]
         return np.random.choice(self.action_size, 1, p=policy)[0]
 
 

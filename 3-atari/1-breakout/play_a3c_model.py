@@ -3,9 +3,9 @@ import random
 import numpy as np
 from skimage.color import rgb2gray
 from skimage.transform import resize
-from keras.models import Model
-from keras.layers import Dense, Flatten, Input
-from keras.layers.convolutional import Conv2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, Flatten, Input
+from tensorflow.keras.layers.convolutional import Conv2D
 
 global episode
 episode = 0
@@ -41,7 +41,7 @@ class TestAgent:
 
     def get_action(self, history):
         history = np.float32(history / 255.)
-        policy = self.actor.predict(history)[0]
+        policy = self.actor.predict(history, verbose=0)[0]
 
         action_index = np.argmax(policy)
         return action_index
@@ -69,6 +69,8 @@ if __name__ == "__main__":
 
         score, start_life = 0, 5
         observe = env.reset()
+        if isinstance(observe, tuple):
+            observe = observe[0]
         next_observe = observe
 
         for _ in range(random.randint(1, 20)):

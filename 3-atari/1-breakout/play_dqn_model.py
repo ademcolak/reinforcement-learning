@@ -4,9 +4,9 @@ import numpy as np
 import tensorflow as tf
 from skimage.color import rgb2gray
 from skimage.transform import resize
-from keras.models import Sequential
-from keras.layers import Dense, Flatten
-from keras.layers.convolutional import Conv2D
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.layers.convolutional import Conv2D
 from keras import backend as K
 
 EPISODES = 50000
@@ -43,7 +43,7 @@ class TestAgent:
         if np.random.random() < 0.01:
             return random.randrange(3)
         history = np.float32(history / 255.0)
-        q_value = self.model.predict(history)
+        q_value = self.model.predict(history, verbose=0)
         return np.argmax(q_value[0])
 
     def load_model(self, filename):
@@ -66,6 +66,8 @@ if __name__ == "__main__":
        
         step, score, start_life = 0, 0, 5
         observe = env.reset()
+        if isinstance(observe, tuple):
+            observe = observe[0]
 
         for _ in range(random.randint(1, agent.no_op_steps)):
             observe, _, _, _ = env.step(1)

@@ -2,9 +2,9 @@ import sys
 import gym
 import pylab
 import numpy as np
-from keras.layers import Dense
-from keras.models import Sequential
-from keras.optimizers import Adam
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
 
 EPISODES = 1000
 
@@ -44,7 +44,7 @@ class A2CAgent:
         actor.summary()
         # See note regarding crossentropy in cartpole_reinforce.py
         actor.compile(loss='categorical_crossentropy',
-                      optimizer=Adam(lr=self.actor_lr))
+                      optimizer=Adam(learning_rate=self.actor_lr))
         return actor
 
     # critic: state is input and value of state is output of model
@@ -55,12 +55,12 @@ class A2CAgent:
         critic.add(Dense(self.value_size, activation='linear',
                          kernel_initializer='he_uniform'))
         critic.summary()
-        critic.compile(loss="mse", optimizer=Adam(lr=self.critic_lr))
+        critic.compile(loss="mse", optimizer=Adam(learning_rate=self.critic_lr))
         return critic
 
     # using the output of policy network, pick action stochastically
     def get_action(self, state):
-        policy = self.actor.predict(state, batch_size=1).flatten()
+        policy = self.actor.predict(state, batch_size=1, verbose=0).flatten()
         return np.random.choice(self.action_size, 1, p=policy)[0]
 
     # update policy network every episode
@@ -68,8 +68,8 @@ class A2CAgent:
         target = np.zeros((1, self.value_size))
         advantages = np.zeros((1, self.action_size))
 
-        value = self.critic.predict(state)[0]
-        next_value = self.critic.predict(next_state)[0]
+        value = self.critic.predict(state, verbose=0)[0]
+        next_value = self.critic.predict(next_state, verbose=0)[0]
 
         if done:
             advantages[0][action] = reward - value
@@ -98,6 +98,8 @@ if __name__ == "__main__":
         done = False
         score = 0
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         state = np.reshape(state, [1, state_size])
 
         while not done:

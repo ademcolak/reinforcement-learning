@@ -6,10 +6,10 @@ import numpy as np
 import tensorflow as tf
 from skimage.color import rgb2gray
 from skimage.transform import resize
-from keras.models import Model
-from keras.optimizers import RMSprop
-from keras.layers import Dense, Flatten, Input
-from keras.layers.convolutional import Conv2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import RMSprop
+from tensorflow.keras.layers import Dense, Flatten, Input
+from tensorflow.keras.layers.convolutional import Conv2D
 from keras import backend as K
 
 # global variables for A3C
@@ -104,7 +104,7 @@ class A3CAgent:
         entropy = K.sum(entropy)
 
         loss = actor_loss + 0.01*entropy
-        optimizer = RMSprop(lr=self.actor_lr, rho=0.99, epsilon=0.01)
+        optimizer = RMSprop(learning_rate=self.actor_lr, rho=0.99, epsilon=0.01)
         updates = optimizer.get_updates(self.actor.trainable_weights, [], loss)
         train = K.function([self.actor.input, action, advantages], [loss], updates=updates)
 
@@ -118,7 +118,7 @@ class A3CAgent:
 
         loss = K.mean(K.square(discounted_reward - value))
 
-        optimizer = RMSprop(lr=self.critic_lr, rho=0.99, epsilon=0.01)
+        optimizer = RMSprop(learning_rate=self.critic_lr, rho=0.99, epsilon=0.01)
         updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
         train = K.function([self.critic.input, discounted_reward], [loss], updates=updates)
         return train
@@ -186,6 +186,8 @@ class Agent(threading.Thread):
             # 1 episode = 5 lives
             score, start_life = 0, 5
             observe = env.reset()
+        if isinstance(observe, tuple):
+            observe = observe[0]
             next_observe = observe
 
             # this is one of DeepMind's idea.
@@ -221,7 +223,7 @@ class Agent(threading.Thread):
                 next_state = np.reshape([next_state], (1, 84, 84, 1))
                 next_history = np.append(next_state, history[:, :, :, :3], axis=3)
 
-                self.avg_p_max += np.amax(self.actor.predict(np.float32(history / 255.)))
+                self.avg_p_max += np.amax(self.actor.predict(np.float32(history / 255., verbose=0)))
 
                 # if the ball is fall, then the agent is dead --> episode is not over
                 if start_life > info['ale.lives']:
@@ -270,7 +272,7 @@ class Agent(threading.Thread):
         discounted_rewards = np.zeros_like(rewards)
         running_add = 0
         if not done:
-            running_add = self.critic.predict(np.float32(self.states[-1] / 255.))[0]
+            running_add = self.critic.predict(np.float32(self.states[-1] / 255., verbose=0))[0]
         for t in reversed(range(0, len(rewards))):
             running_add = running_add * self.discount_factor + rewards[t]
             discounted_rewards[t] = running_add
@@ -286,7 +288,7 @@ class Agent(threading.Thread):
 
         states = np.float32(states / 255.)
 
-        values = self.critic.predict(states)
+        values = self.critic.predict(states, verbose=0)
         values = np.reshape(values, len(values))
 
         advantages = discounted_rewards - values
@@ -324,7 +326,7 @@ class Agent(threading.Thread):
 
     def get_action(self, history):
         history = np.float32(history / 255.)
-        policy = self.local_actor.predict(history)[0]
+        policy = self.local_actor.predict(history, verbose=0)[0]
         action_index = np.random.choice(self.action_size, 1, p=policy)[0]
         return action_index, policy
 

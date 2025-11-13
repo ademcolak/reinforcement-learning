@@ -5,10 +5,10 @@ import tensorflow as tf
 from collections import deque
 from skimage.color import rgb2gray
 from skimage.transform import resize
-from keras.models import Sequential
-from keras.optimizers import RMSprop
-from keras.layers import Dense, Flatten
-from keras.layers.convolutional import Conv2D
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import RMSprop
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.layers.convolutional import Conv2D
 from keras import backend as K
 
 EPISODES = 50000
@@ -70,7 +70,7 @@ class DDQNAgent:
         linear_part = error - quadratic_part
         loss = K.mean(0.5 * K.square(quadratic_part) + linear_part)
 
-        optimizer = RMSprop(lr=0.00025, epsilon=0.01)
+        optimizer = RMSprop(learning_rate=0.00025, epsilon=0.01)
         updates = optimizer.get_updates(self.model.trainable_weights, [], loss)
         train = K.function([self.model.input, a, y], [loss], updates=updates)
 
@@ -101,7 +101,7 @@ class DDQNAgent:
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
         else:
-            q_value = self.model.predict(history)
+            q_value = self.model.predict(history, verbose=0)
             return np.argmax(q_value[0])
 
     # save sample <s,a,r,s'> to the replay memory
@@ -131,8 +131,8 @@ class DDQNAgent:
             reward.append(mini_batch[i][2])
             dead.append(mini_batch[i][4])
 
-        value = self.model.predict(next_history)
-        target_value = self.target_model.predict(next_history)
+        value = self.model.predict(next_history, verbose=0)
+        target_value = self.target_model.predict(next_history, verbose=0)
 
         # like Q Learning, get maximum Q value at s'
         # But from target model
@@ -193,6 +193,8 @@ if __name__ == "__main__":
         # 1 episode = 5 lives
         step, score, start_life = 0, 0, 5
         observe = env.reset()
+        if isinstance(observe, tuple):
+            observe = observe[0]
 
         # this is one of DeepMind's idea.
         # just do nothing at the start of episode to avoid sub-optimal
@@ -225,7 +227,7 @@ if __name__ == "__main__":
             next_history = np.append(next_state, history[:, :, :, :3], axis=3)
 
             agent.avg_q_max += np.amax(
-                agent.model.predict(np.float32(history / 255.))[0])
+                agent.model.predict(np.float32(history / 255., verbose=0))[0])
 
             # if the agent missed ball, agent is dead --> episode is not over
             if start_life > info['ale.lives']:

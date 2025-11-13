@@ -91,6 +91,8 @@ if __name__ == "__main__":
 
     for episode in range(1000):
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         action = agent.get_action(state)
 
         while True:

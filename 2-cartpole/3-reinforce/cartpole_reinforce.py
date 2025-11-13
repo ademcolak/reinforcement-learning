@@ -2,9 +2,9 @@ import sys
 import gym
 import pylab
 import numpy as np
-from keras.layers import Dense
-from keras.models import Sequential
-from keras.optimizers import Adam
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
 
 EPISODES = 1000
 
@@ -48,12 +48,12 @@ class REINFORCEAgent:
         # p_a = advantage. q_a is the output of the policy network, which is
         # the probability of taking the action a, i.e. policy(s, a). 
         # All other p_i are zero, thus we have H(p, q) = A * log(policy(s, a))
-        model.compile(loss="categorical_crossentropy", optimizer=Adam(lr=self.learning_rate))
+        model.compile(loss="categorical_crossentropy", optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     # using the output of policy network, pick action stochastically
     def get_action(self, state):
-        policy = self.model.predict(state, batch_size=1).flatten()
+        policy = self.model.predict(state, batch_size=1, verbose=0).flatten()
         return np.random.choice(self.action_size, 1, p=policy)[0]
 
     # In Policy Gradient, Q function is not available.
@@ -106,6 +106,8 @@ if __name__ == "__main__":
         done = False
         score = 0
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         state = np.reshape(state, [1, state_size])
 
         while not done:

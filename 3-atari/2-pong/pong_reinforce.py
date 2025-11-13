@@ -1,9 +1,9 @@
 import gym
 import numpy as np
-from keras.models import Sequential
-from keras.layers import Dense, Reshape, Flatten
-from keras.optimizers import Adam
-from keras.layers.convolutional import Convolution2D
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Reshape, Flatten
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.layers.convolutional import Convolution2D
 
 
 class PGAgent:
@@ -28,7 +28,7 @@ class PGAgent:
         model.add(Dense(64, activation='relu', init='he_uniform'))
         model.add(Dense(32, activation='relu', init='he_uniform'))
         model.add(Dense(self.action_size, activation='softmax'))
-        opt = Adam(lr=self.learning_rate)
+        opt = Adam(learning_rate=self.learning_rate)
         # See note regarding crossentropy in cartpole_reinforce.py
         model.compile(loss='categorical_crossentropy', optimizer=opt)
         return model
@@ -42,7 +42,7 @@ class PGAgent:
 
     def act(self, state):
         state = state.reshape([1, state.shape[0]])
-        aprob = self.model.predict(state, batch_size=1).flatten()
+        aprob = self.model.predict(state, batch_size=1, verbose=0).flatten()
         self.probs.append(aprob)
         prob = aprob / np.sum(aprob)
         action = np.random.choice(self.action_size, 1, p=prob)[0]
@@ -86,6 +86,8 @@ def preprocess(I):
 if __name__ == "__main__":
     env = gym.make("Pong-v0")
     state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
     prev_x = None
     score = 0
     episode = 0
@@ -112,6 +114,8 @@ if __name__ == "__main__":
             print('Episode: %d - Score: %f.' % (episode, score))
             score = 0
             state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
             prev_x = None
             if episode > 1 and episode % 10 == 0:
                 agent.save('./save_model/pong_reinforce.h5')
