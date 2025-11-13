@@ -5,9 +5,9 @@ import random
 import numpy as np
 from SumTree import SumTree
 from collections import deque
-from keras.layers import Dense
-from keras.optimizers import Adam
-from keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import Sequential
 
 EPISODES = 300
 
@@ -55,7 +55,7 @@ class DQNAgent:
         model.add(Dense(self.action_size, activation='linear',
                         kernel_initializer='he_uniform'))
         model.summary()
-        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     # 타깃 모델을 모델의 가중치로 업데이트
@@ -67,7 +67,7 @@ class DQNAgent:
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
         else:
-            q_value = self.model.predict(state)
+            q_value = self.model.predict(state, verbose=0)
             return np.argmax(q_value[0])
 
     # 샘플 <s, a, r, s'>을 리플레이 메모리에 저장
@@ -76,9 +76,9 @@ class DQNAgent:
             done = True
 
         # TD-error 를 구해서 같이 메모리에 저장
-        target = self.model.predict([state])
+        target = self.model.predict([state], verbose=0)
         old_val = target[0][action]
-        target_val = self.target_model.predict([next_state])
+        target_val = self.target_model.predict([next_state], verbose=0)
         if done:
             target[0][action] = reward
         else:
@@ -110,8 +110,8 @@ class DQNAgent:
 
         # 현재 상태에 대한 모델의 큐함수
         # 다음 상태에 대한 타깃 모델의 큐함수
-        target = self.model.predict(states)
-        target_val = self.target_model.predict(next_states)
+        target = self.model.predict(states, verbose=0)
+        target_val = self.target_model.predict(next_states, verbose=0)
 
         # 벨만 최적 방정식을 이용한 업데이트 타깃
         for i in range(self.batch_size):
@@ -183,6 +183,8 @@ if __name__ == "__main__":
         score = 0
         # env 초기화
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         state = np.reshape(state, [1, state_size])
 
         while not done:

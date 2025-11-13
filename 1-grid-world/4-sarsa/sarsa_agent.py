@@ -54,6 +54,8 @@ if __name__ == "__main__":
         # reset environment and initialize state
 
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         # get action of state from agent
         action = agent.get_action(str(state))
 

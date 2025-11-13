@@ -10,20 +10,22 @@ From the basics to deep reinforcement learning, this repo provides easy-to-read 
 Please feel free to create a [Pull Request](https://github.com/rlcode/reinforcement-learning/pulls), or open an [issue](https://github.com/rlcode/reinforcement-learning/issues)!
 
 ## Dependencies
-1. Python 3.5
-2. Tensorflow 1.0.0
-3. Keras
-4. numpy
-5. pandas
-6. matplot
-7. pillow
-8. Skimage
-9. h5py
+1. Python 3.8+
+2. TensorFlow 2.15+
+3. NumPy
+4. Pandas
+5. Matplotlib
+6. Pillow
+7. scikit-image
+8. h5py
+9. gym / gymnasium
 
 ### Install Requirements
-```
+```bash
 pip install -r requirements.txt
 ```
+
+**Note**: This project has been updated from TensorFlow 1.x to TensorFlow 2.x. The code now uses `tensorflow.keras` instead of standalone Keras.
 
 ## Table of Contents
 

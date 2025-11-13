@@ -4,10 +4,9 @@ import numpy as np
 import tensorflow as tf
 from skimage.color import rgb2gray
 from skimage.transform import resize
-from keras.models import Sequential
-from keras.layers import Dense, Flatten
-from keras.layers.convolutional import Conv2D
-from keras import backend as K
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.layers import Conv2D
 
 EPISODES = 50000
 
@@ -19,12 +18,7 @@ class TestAgent:
         self.no_op_steps = 20
 
         self.model = self.build_model()
-
-        self.sess = tf.InteractiveSession()
-        K.set_session(self.sess)
-
-        self.avg_q_max, self.avg_loss = 0, 0
-        self.sess.run(tf.global_variables_initializer())
+        # TensorFlow 2.x uses eager execution (no session needed)
 
     def build_model(self):
         model = Sequential()
@@ -43,7 +37,7 @@ class TestAgent:
         if np.random.random() < 0.01:
             return random.randrange(3)
         history = np.float32(history / 255.0)
-        q_value = self.model.predict(history)
+        q_value = self.model.predict(history, verbose=0)
         return np.argmax(q_value[0])
 
     def load_model(self, filename):
@@ -56,7 +50,11 @@ def pre_processing(observe):
 
 
 if __name__ == "__main__":
-    env = gym.make('BreakoutDeterministic-v4')
+    try:
+        env = gym.make('BreakoutDeterministic-v4')
+    except:
+        env = gym.make('ALE/Breakout-v5')
+
     agent = TestAgent(action_size=3)
     agent.load_model("./save_model/breakout_dqn_5.h5")
 
@@ -66,9 +64,12 @@ if __name__ == "__main__":
        
         step, score, start_life = 0, 0, 5
         observe = env.reset()
+        if isinstance(observe, tuple):
+            observe = observe[0]
 
         for _ in range(random.randint(1, agent.no_op_steps)):
-            observe, _, _, _ = env.step(1)
+            result = env.step(1)
+            observe = result[0]
 
         state = pre_processing(observe)
         history = np.stack((state, state, state, state), axis=2)
@@ -91,13 +92,22 @@ if __name__ == "__main__":
                 real_action = 1
                 dead = False
 
-            observe, reward, done, info = env.step(real_action)
+            step_result = env.step(real_action)
+            observe = step_result[0]
+            reward = step_result[1]
+            done = step_result[2]
+            # Handle both old and new gym API
+            if len(step_result) == 5:
+                done = step_result[2] or step_result[3]
+                info = step_result[4]
+            else:
+                info = step_result[3]
 
             next_state = pre_processing(observe)
             next_state = np.reshape([next_state], (1, 84, 84, 1))
             next_history = np.append(next_state, history[:, :, :, :3], axis=3)
 
-            if start_life > info['ale.lives']:
+            if 'ale.lives' in info and start_life > info['ale.lives']:
                 dead = True
                 start_life = info['ale.lives']
 

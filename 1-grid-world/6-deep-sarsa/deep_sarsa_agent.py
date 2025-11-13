@@ -3,9 +3,9 @@ import pylab
 import random
 import numpy as np
 from environment import Env
-from keras.layers import Dense
-from keras.optimizers import Adam
-from keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import Sequential
 
 EPISODES = 1000
 
@@ -40,7 +40,7 @@ class DeepSARSAgent:
         model.add(Dense(30, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
         model.summary()
-        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     # get action from model using epsilon-greedy policy
@@ -51,7 +51,7 @@ class DeepSARSAgent:
         else:
             # Predict the reward value based on the given state
             state = np.float32(state)
-            q_values = self.model.predict(state)
+            q_values = self.model.predict(state, verbose=0)
             return np.argmax(q_values[0])
 
     def train_model(self, state, action, reward, next_state, next_action, done):
@@ -60,14 +60,14 @@ class DeepSARSAgent:
 
         state = np.float32(state)
         next_state = np.float32(next_state)
-        target = self.model.predict(state)[0]
+        target = self.model.predict(state, verbose=0)[0]
         # like Q Learning, get maximum Q value at s'
         # But from target model
         if done:
             target[action] = reward
         else:
             target[action] = (reward + self.discount_factor *
-                              self.model.predict(next_state)[0][next_action])
+                              self.model.predict(next_state, verbose=0)[0][next_action])
 
         target = np.reshape(target, [1, 5])
         # make minibatch which includes target q value and predicted q value
@@ -86,6 +86,8 @@ if __name__ == "__main__":
         done = False
         score = 0
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         state = np.reshape(state, [1, 15])
 
         while not done:

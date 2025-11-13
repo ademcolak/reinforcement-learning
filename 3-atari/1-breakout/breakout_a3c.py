@@ -6,11 +6,10 @@ import numpy as np
 import tensorflow as tf
 from skimage.color import rgb2gray
 from skimage.transform import resize
-from keras.models import Model
-from keras.optimizers import RMSprop
-from keras.layers import Dense, Flatten, Input
-from keras.layers.convolutional import Conv2D
-from keras import backend as K
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import RMSprop
+from tensorflow.keras.layers import Dense, Flatten, Input
+from tensorflow.keras.layers import Conv2D
 
 # global variables for A3C
 global episode
@@ -18,7 +17,13 @@ episode = 0
 EPISODES = 8000000
 # In case of BreakoutDeterministic-v3, always skip 4 frames
 # Deterministic-v4 version use 4 actions
-env_name = "BreakoutDeterministic-v4"
+try:
+    import gym
+    test_env = gym.make("BreakoutDeterministic-v4")
+    test_env.close()
+    env_name = "BreakoutDeterministic-v4"
+except:
+    env_name = "ALE/Breakout-v5"
 
 # This is A3C(Asynchronous Advantage Actor Critic) agent(global) for the Cartpole
 # In this example, we use A3C algorithm
@@ -39,21 +44,18 @@ class A3CAgent:
         # create model for actor and critic network
         self.actor, self.critic = self.build_model()
 
-        # method for training actor and critic network
-        self.optimizer = [self.actor_optimizer(), self.critic_optimizer()]
+        # TensorFlow 2.x - use eager execution (no session needed)
+        self.actor_optimizer_obj = RMSprop(learning_rate=self.actor_lr, rho=0.99, epsilon=0.01)
+        self.critic_optimizer_obj = RMSprop(learning_rate=self.critic_lr, rho=0.99, epsilon=0.01)
 
-        self.sess = tf.InteractiveSession()
-        K.set_session(self.sess)
-        self.sess.run(tf.global_variables_initializer())
-
-        self.summary_placeholders, self.update_ops, self.summary_op = self.setup_summary()
-        self.summary_writer = tf.summary.FileWriter('summary/breakout_a3c', self.sess.graph)
+        # TensorBoard setup - modern TF2 API
+        self.summary_writer = tf.summary.create_file_writer('summary/breakout_a3c')
 
     def train(self):
         # self.load_model("./save_model/breakout_a3c")
-        agents = [Agent(self.action_size, self.state_size, [self.actor, self.critic], self.sess, self.optimizer,
-                        self.discount_factor, [self.summary_op, self.summary_placeholders,
-                        self.update_ops, self.summary_writer]) for _ in range(self.threads)]
+        agents = [Agent(self.action_size, self.state_size, [self.actor, self.critic],
+                        self.actor_optimizer_obj, self.critic_optimizer_obj,
+                        self.discount_factor, self.summary_writer) for _ in range(self.threads)]
 
         for agent in agents:
             time.sleep(1)
@@ -79,49 +81,10 @@ class A3CAgent:
         actor = Model(inputs=input, outputs=policy)
         critic = Model(inputs=input, outputs=value)
 
-        actor._make_predict_function()
-        critic._make_predict_function()
-
         actor.summary()
         critic.summary()
 
         return actor, critic
-
-    # make loss function for Policy Gradient
-    # [log(action probability) * advantages] will be input for the back prop
-    # we add entropy of action probability to loss
-    def actor_optimizer(self):
-        action = K.placeholder(shape=[None, self.action_size])
-        advantages = K.placeholder(shape=[None, ])
-
-        policy = self.actor.output
-
-        good_prob = K.sum(action * policy, axis=1)
-        eligibility = K.log(good_prob + 1e-10) * advantages
-        actor_loss = -K.sum(eligibility)
-
-        entropy = K.sum(policy * K.log(policy + 1e-10), axis=1)
-        entropy = K.sum(entropy)
-
-        loss = actor_loss + 0.01*entropy
-        optimizer = RMSprop(lr=self.actor_lr, rho=0.99, epsilon=0.01)
-        updates = optimizer.get_updates(self.actor.trainable_weights, [], loss)
-        train = K.function([self.actor.input, action, advantages], [loss], updates=updates)
-
-        return train
-
-    # make loss function for Value approximation
-    def critic_optimizer(self):
-        discounted_reward = K.placeholder(shape=(None, ))
-
-        value = self.critic.output
-
-        loss = K.mean(K.square(discounted_reward - value))
-
-        optimizer = RMSprop(lr=self.critic_lr, rho=0.99, epsilon=0.01)
-        updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
-        train = K.function([self.critic.input, discounted_reward], [loss], updates=updates)
-        return train
 
     def load_model(self, name):
         self.actor.load_weights(name + "_actor.h5")
@@ -131,34 +94,18 @@ class A3CAgent:
         self.actor.save_weights(name + "_actor.h5")
         self.critic.save_weights(name + '_critic.h5')
 
-    # make summary operators for tensorboard
-    def setup_summary(self):
-        episode_total_reward = tf.Variable(0.)
-        episode_avg_max_q = tf.Variable(0.)
-        episode_duration = tf.Variable(0.)
-
-        tf.summary.scalar('Total Reward/Episode', episode_total_reward)
-        tf.summary.scalar('Average Max Prob/Episode', episode_avg_max_q)
-        tf.summary.scalar('Duration/Episode', episode_duration)
-
-        summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration]
-        summary_placeholders = [tf.placeholder(tf.float32) for _ in range(len(summary_vars))]
-        update_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
-        summary_op = tf.summary.merge_all()
-        return summary_placeholders, update_ops, summary_op
-
 # make agents(local) and start training
 class Agent(threading.Thread):
-    def __init__(self, action_size, state_size, model, sess, optimizer, discount_factor, summary_ops):
+    def __init__(self, action_size, state_size, model, actor_optimizer, critic_optimizer, discount_factor, summary_writer):
         threading.Thread.__init__(self)
 
         self.action_size = action_size
         self.state_size = state_size
         self.actor, self.critic = model
-        self.sess = sess
-        self.optimizer = optimizer
+        self.actor_optimizer = actor_optimizer
+        self.critic_optimizer = critic_optimizer
         self.discount_factor = discount_factor
-        self.summary_op, self.summary_placeholders, self.update_ops, self.summary_writer = summary_ops
+        self.summary_writer = summary_writer
 
         self.states, self.actions, self.rewards = [],[],[]
 
@@ -186,13 +133,16 @@ class Agent(threading.Thread):
             # 1 episode = 5 lives
             score, start_life = 0, 5
             observe = env.reset()
+            if isinstance(observe, tuple):
+                observe = observe[0]
             next_observe = observe
 
             # this is one of DeepMind's idea.
             # just do nothing at the start of episode to avoid sub-optimal
             for _ in range(random.randint(1, 30)):
                 observe = next_observe
-                next_observe, _, _, _ = env.step(1)
+                result = env.step(1)
+                next_observe = result[0]
 
             # At start of episode, there is no preceding frame. So just copy initial states to make history
             state = pre_processing(next_observe, observe)
@@ -206,25 +156,39 @@ class Agent(threading.Thread):
                 # get action for the current history and go one step in environment
                 action, policy = self.get_action(history)
                 # change action to real_action
-                if action == 0: real_action = 1
-                elif action == 1: real_action = 2
-                else: real_action = 3
+                if action == 0:
+                    real_action = 1
+                elif action == 1:
+                    real_action = 2
+                else:
+                    real_action = 3
 
                 if dead:
                     action = 0
                     real_action = 1
                     dead = False
 
-                next_observe, reward, done, info = env.step(real_action)
+                step_result = env.step(real_action)
+                next_observe = step_result[0]
+                reward = step_result[1]
+                done = step_result[2]
+                # Handle both old and new gym API
+                if len(step_result) == 5:
+                    # New gym: (obs, reward, terminated, truncated, info)
+                    done = step_result[2] or step_result[3]
+                    info = step_result[4]
+                else:
+                    # Old gym: (obs, reward, done, info)
+                    info = step_result[3]
                 # pre-process the observation --> history
                 next_state = pre_processing(next_observe, observe)
                 next_state = np.reshape([next_state], (1, 84, 84, 1))
                 next_history = np.append(next_state, history[:, :, :, :3], axis=3)
 
-                self.avg_p_max += np.amax(self.actor.predict(np.float32(history / 255.)))
+                self.avg_p_max += np.amax(self.actor.predict(np.float32(history / 255.), verbose=0))
 
                 # if the ball is fall, then the agent is dead --> episode is not over
-                if start_life > info['ale.lives']:
+                if 'ale.lives' in info and start_life > info['ale.lives']:
                     dead = True
                     start_life = info['ale.lives']
 
@@ -252,14 +216,14 @@ class Agent(threading.Thread):
                     episode += 1
                     print("episode:", episode, "  score:", score, "  step:", step)
 
-                    stats = [score, self.avg_p_max / float(step),
-                             step]
-                    for i in range(len(stats)):
-                        self.sess.run(self.update_ops[i], feed_dict={
-                            self.summary_placeholders[i]: float(stats[i])
-                        })
-                    summary_str = self.sess.run(self.summary_op)
-                    self.summary_writer.add_summary(summary_str, episode + 1)
+                    # Write summary for tensorboard
+                    with self.summary_writer.as_default():
+                        tf.summary.scalar('Total Reward/Episode', score, step=episode)
+                        tf.summary.scalar('Average Max Prob/Episode',
+                                        self.avg_p_max / float(step), step=episode)
+                        tf.summary.scalar('Duration/Episode', step, step=episode)
+                        self.summary_writer.flush()
+
                     self.avg_p_max = 0
                     self.avg_loss = 0
                     step = 0
@@ -270,7 +234,7 @@ class Agent(threading.Thread):
         discounted_rewards = np.zeros_like(rewards)
         running_add = 0
         if not done:
-            running_add = self.critic.predict(np.float32(self.states[-1] / 255.))[0]
+            running_add = self.critic.predict(np.float32(self.states[-1] / 255.), verbose=0)[0]
         for t in reversed(range(0, len(rewards))):
             running_add = running_add * self.discount_factor + rewards[t]
             discounted_rewards[t] = running_add
@@ -286,13 +250,33 @@ class Agent(threading.Thread):
 
         states = np.float32(states / 255.)
 
-        values = self.critic.predict(states)
+        values = self.critic.predict(states, verbose=0)
         values = np.reshape(values, len(values))
 
         advantages = discounted_rewards - values
+        actions = np.array(self.actions)
 
-        self.optimizer[0]([states, self.actions, advantages])
-        self.optimizer[1]([states, discounted_rewards])
+        # Train actor
+        with tf.GradientTape() as tape:
+            policy = self.actor(states, training=True)
+            action_prob = tf.reduce_sum(actions * policy, axis=1)
+            cross_entropy = -tf.math.log(action_prob + 1e-10)
+            loss = tf.reduce_sum(cross_entropy * advantages)
+            entropy = tf.reduce_sum(policy * tf.math.log(policy + 1e-10))
+            actor_loss = loss + 0.01 * entropy
+
+        actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
+        self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+
+        # Train critic
+        with tf.GradientTape() as tape:
+            values = self.critic(states, training=True)
+            values = tf.reshape(values, [-1])
+            critic_loss = tf.reduce_mean(tf.square(discounted_rewards - values))
+
+        critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
+        self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+
         self.states, self.actions, self.rewards = [], [], []
 
     def build_localmodel(self):
@@ -306,9 +290,6 @@ class Agent(threading.Thread):
 
         actor = Model(inputs=input, outputs=policy)
         critic = Model(inputs=input, outputs=value)
-
-        actor._make_predict_function()
-        critic._make_predict_function()
 
         actor.set_weights(self.actor.get_weights())
         critic.set_weights(self.critic.get_weights())
@@ -324,7 +305,7 @@ class Agent(threading.Thread):
 
     def get_action(self, history):
         history = np.float32(history / 255.)
-        policy = self.local_actor.predict(history)[0]
+        policy = self.local_actor.predict(history, verbose=0)[0]
         action_index = np.random.choice(self.action_size, 1, p=policy)[0]
         return action_index, policy
 

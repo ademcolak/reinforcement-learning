@@ -3,9 +3,9 @@ import random
 import numpy as np
 from skimage.color import rgb2gray
 from skimage.transform import resize
-from keras.models import Model
-from keras.layers import Dense, Flatten, Input
-from keras.layers.convolutional import Conv2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, Flatten, Input
+from tensorflow.keras.layers import Conv2D
 
 global episode
 episode = 0
@@ -41,7 +41,7 @@ class TestAgent:
 
     def get_action(self, history):
         history = np.float32(history / 255.)
-        policy = self.actor.predict(history)[0]
+        policy = self.actor.predict(history, verbose=0)[0]
 
         action_index = np.argmax(policy)
         return action_index
@@ -57,7 +57,11 @@ def pre_processing(next_observe, observe):
 
 
 if __name__ == "__main__":
-    env = gym.make(env_name)
+    try:
+        env = gym.make(env_name)
+    except:
+        env = gym.make('ALE/Breakout-v5')
+
     agent = TestAgent(action_size=3)
     agent.load_model("save_model/breakout_a3c_5_actor.h5")
 
@@ -69,11 +73,14 @@ if __name__ == "__main__":
 
         score, start_life = 0, 5
         observe = env.reset()
+        if isinstance(observe, tuple):
+            observe = observe[0]
         next_observe = observe
 
         for _ in range(random.randint(1, 20)):
             observe = next_observe
-            next_observe, _, _, _ = env.step(1)
+            result = env.step(1)
+            next_observe = result[0]
 
         state = pre_processing(next_observe, observe)
         history = np.stack((state, state, state, state), axis=2)
@@ -97,13 +104,22 @@ if __name__ == "__main__":
                 fake_action = 1
                 dead = False
 
-            next_observe, reward, done, info = env.step(fake_action)
+            step_result = env.step(fake_action)
+            next_observe = step_result[0]
+            reward = step_result[1]
+            done = step_result[2]
+            # Handle both old and new gym API
+            if len(step_result) == 5:
+                done = step_result[2] or step_result[3]
+                info = step_result[4]
+            else:
+                info = step_result[3]
 
             next_state = pre_processing(next_observe, observe)
             next_state = np.reshape([next_state], (1, 84, 84, 1))
             next_history = np.append(next_state, history[:, :, :, :3], axis=3)
 
-            if start_life > info['ale.lives']:
+            if 'ale.lives' in info and start_life > info['ale.lives']:
                 dead = True
                 reward = -1
                 start_life = info['ale.lives']

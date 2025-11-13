@@ -3,9 +3,9 @@ import pylab
 import random
 import numpy as np
 from collections import deque
-from keras.layers import Dense
-from keras.optimizers import Adam
-from keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import Sequential
 
 EPISODES = 4000
 
@@ -44,7 +44,7 @@ class DQNAgent:
         model.add(Dense(16, activation='relu', kernel_initializer='he_uniform'))
         model.add(Dense(self.action_size, activation='linear', kernel_initializer='he_uniform'))
         model.summary()
-        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     # 일정한 시간 간격마다 타겟 모델을 현재 학습하고 있는 모델로 업데이트
@@ -56,7 +56,7 @@ class DQNAgent:
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
         else:
-            q_value = self.model.predict(state)
+            q_value = self.model.predict(state, verbose=0)
             return np.argmax(q_value[0])
 
     # <s,a,r,s'>을 replay_memory에 저장함
@@ -80,14 +80,14 @@ class DQNAgent:
 
         for i in range(batch_size):
             state, action, reward, next_state, done = mini_batch[i]
-            target = self.model.predict(state)[0]
+            target = self.model.predict(state, verbose=0)[0]
 
             # 큐러닝에서와 같이 s'에서의 최대 Q Value를 가져옴. 단, 타겟 모델에서 가져옴
             if done:
                 target[action] = reward
             else:
                 target[action] = reward + self.discount_factor * \
-                                          np.amax(self.target_model.predict(next_state)[0])
+                                          np.amax(self.target_model.predict(next_state, verbose=0)[0])
             update_input[i] = state
             update_target[i] = target
 
@@ -119,6 +119,8 @@ if __name__ == "__main__":
         done = False
         score = 0
         state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
         state = np.reshape(state, [1, state_size])
         print(state)
 
