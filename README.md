@@ -31,6 +31,7 @@ pip install -r requirements.txt
 
 **Grid World** - Mastering the basics of reinforcement learning in the simplified world called "Grid World"
 
+- [Simple Q-Learning](./1-grid-world/0-simple-q-learning) - *Start here!* Basic Q-Learning with reward matrix
 - [Policy Iteration](./1-grid-world/1-policy-iteration)
 - [Value Iteration](./1-grid-world/2-value-iteration)
 - [Monte Carlo](./1-grid-world/3-monte-carlo)
