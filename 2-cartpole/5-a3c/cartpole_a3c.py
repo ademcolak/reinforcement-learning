@@ -7,7 +7,6 @@ import gym
 from tensorflow.keras.layers import Dense, Input
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
-from keras import backend as K
 
 
 # global variables for threading
@@ -37,12 +36,9 @@ class A3CAgent:
         # create model for actor and critic network
         self.actor, self.critic = self.build_model()
 
-        # method for training actor and critic network
-        self.optimizer = [self.actor_optimizer(), self.critic_optimizer()]
-
-        self.sess = tf.InteractiveSession()
-        K.set_session(self.sess)
-        self.sess.run(tf.global_variables_initializer())
+        # TensorFlow 2.x - use eager execution (no session needed)
+        self.actor_optimizer = Adam(learning_rate=self.actor_lr)
+        self.critic_optimizer = Adam(learning_rate=self.critic_lr)
 
     # approximate policy and value using Neural Network
     # actor -> state is input and probability of each action is output of network
@@ -61,54 +57,17 @@ class A3CAgent:
         actor = Model(inputs=state, outputs=action_prob)
         critic = Model(inputs=state, outputs=state_value)
 
-        actor._make_predict_function()
-        critic._make_predict_function()
-
         actor.summary()
         critic.summary()
 
         return actor, critic
 
-    # make loss function for Policy Gradient
-    # [log(action probability) * advantages] will be input for the back prop
-    # we add entropy of action probability to loss
-    def actor_optimizer(self):
-        action = K.placeholder(shape=(None, self.action_size))
-        advantages = K.placeholder(shape=(None, ))
-
-        policy = self.actor.output
-
-        good_prob = K.sum(action * policy, axis=1)
-        eligibility = K.log(good_prob + 1e-10) * K.stop_gradient(advantages)
-        loss = -K.sum(eligibility)
-
-        entropy = K.sum(policy * K.log(policy + 1e-10), axis=1)
-
-        actor_loss = loss + 0.01*entropy
-
-        optimizer = Adam(learning_rate=self.actor_lr)
-        updates = optimizer.get_updates(self.actor.trainable_weights, [], actor_loss)
-        train = K.function([self.actor.input, action, advantages], [], updates=updates)
-        return train
-
-    # make loss function for Value approximation
-    def critic_optimizer(self):
-        discounted_reward = K.placeholder(shape=(None, ))
-
-        value = self.critic.output
-
-        loss = K.mean(K.square(discounted_reward - value))
-
-        optimizer = Adam(learning_rate=self.critic_lr)
-        updates = optimizer.get_updates(self.critic.trainable_weights, [], loss)
-        train = K.function([self.critic.input, discounted_reward], [], updates=updates)
-        return train
-
     # make agents(local) and start training
     def train(self):
         # self.load_model('./save_model/cartpole_a3c.h5')
-        agents = [Agent(i, self.actor, self.critic, self.optimizer, self.env_name, self.discount_factor,
-                        self.action_size, self.state_size) for i in range(self.threads)]
+        agents = [Agent(i, self.actor, self.critic, self.actor_optimizer, self.critic_optimizer,
+                        self.env_name, self.discount_factor, self.action_size, self.state_size)
+                  for i in range(self.threads)]
 
         for agent in agents:
             agent.start()
@@ -132,7 +91,7 @@ class A3CAgent:
 
 # This is Agent(local) class for threading
 class Agent(threading.Thread):
-    def __init__(self, index, actor, critic, optimizer, env_name, discount_factor, action_size, state_size):
+    def __init__(self, index, actor, critic, actor_optimizer, critic_optimizer, env_name, discount_factor, action_size, state_size):
         threading.Thread.__init__(self)
 
         self.states = []
@@ -142,7 +101,8 @@ class Agent(threading.Thread):
         self.index = index
         self.actor = actor
         self.critic = critic
-        self.optimizer = optimizer
+        self.actor_optimizer = actor_optimizer
+        self.critic_optimizer = critic_optimizer
         self.env_name = env_name
         self.discount_factor = discount_factor
         self.action_size = action_size
@@ -154,12 +114,20 @@ class Agent(threading.Thread):
         env = gym.make(self.env_name)
         while episode < EPISODES:
             state = env.reset()
-        if isinstance(state, tuple):
-            state = state[0]
+            if isinstance(state, tuple):
+                state = state[0]
             score = 0
             while True:
                 action = self.get_action(state)
-                next_state, reward, done, _ = env.step(action)
+                step_result = env.step(action)
+                next_state = step_result[0]
+                reward = step_result[1]
+                done = step_result[2]
+                # Handle both old and new gym API
+                if len(step_result) == 5:
+                    # New gym: (obs, reward, terminated, truncated, info)
+                    done = step_result[2] or step_result[3]
+
                 score += reward
 
                 self.memory(state, action, reward)
@@ -179,7 +147,7 @@ class Agent(threading.Thread):
         discounted_rewards = np.zeros_like(rewards)
         running_add = 0
         if not done:
-            running_add = self.critic.predict(np.reshape(self.states[-1], (1, self.state_size, verbose=0)))[0]
+            running_add = self.critic.predict(np.reshape(self.states[-1], (1, self.state_size)), verbose=0)[0]
         for t in reversed(range(0, len(rewards))):
             running_add = running_add * self.discount_factor + rewards[t]
             discounted_rewards[t] = running_add
@@ -198,17 +166,37 @@ class Agent(threading.Thread):
     def train_episode(self, done):
         discounted_rewards = self.discount_rewards(self.rewards, done)
 
-        values = self.critic.predict(np.array(self.states, verbose=0))
+        states = np.array(self.states)
+        values = self.critic.predict(states, verbose=0)
         values = np.reshape(values, len(values))
 
         advantages = discounted_rewards - values
+        actions = np.array(self.actions)
 
-        self.optimizer[0]([self.states, self.actions, advantages])
-        self.optimizer[1]([self.states, discounted_rewards])
+        # Train actor
+        with tf.GradientTape() as tape:
+            policy = self.actor(states, training=True)
+            action_prob = tf.reduce_sum(actions * policy, axis=1)
+            cross_entropy = -tf.math.log(action_prob + 1e-10)
+            loss = tf.reduce_sum(cross_entropy * advantages)
+            entropy = tf.reduce_sum(policy * tf.math.log(policy + 1e-10))
+            actor_loss = loss + 0.01 * entropy
+
+        actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
+        self.actor_optimizer.apply_gradients(zip(actor_grads, self.actor.trainable_variables))
+
+        # Train critic
+        with tf.GradientTape() as tape:
+            values = self.critic(states, training=True)
+            critic_loss = tf.reduce_mean(tf.square(discounted_rewards - values))
+
+        critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
+        self.critic_optimizer.apply_gradients(zip(critic_grads, self.critic.trainable_variables))
+
         self.states, self.actions, self.rewards = [], [], []
 
     def get_action(self, state):
-        policy = self.actor.predict(np.reshape(state, [1, self.state_size], verbose=0))[0]
+        policy = self.actor.predict(np.reshape(state, [1, self.state_size]), verbose=0)[0]
         return np.random.choice(self.action_size, 1, p=policy)[0]
 
 

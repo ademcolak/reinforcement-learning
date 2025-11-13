@@ -1,11 +1,11 @@
 import copy
 import pylab
 import numpy as np
+import tensorflow as tf
 from environment import Env
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.models import Sequential
-from keras import backend as K
 
 EPISODES = 2500
 
@@ -23,7 +23,7 @@ class ReinforceAgent:
         self.learning_rate = 0.001
 
         self.model = self.build_model()
-        self.optimizer = self.optimizer()
+        self.optimizer = Adam(learning_rate=self.learning_rate)
         self.states, self.actions, self.rewards = [], [], []
 
         if self.load_model:
@@ -38,24 +38,6 @@ class ReinforceAgent:
         model.summary()
         return model
 
-    # create error function and training function to update policy network
-    def optimizer(self):
-        action = K.placeholder(shape=[None, 5])
-        discounted_rewards = K.placeholder(shape=[None, ])
-
-        # Calculate cross entropy error function
-        action_prob = K.sum(action * self.model.output, axis=1)
-        cross_entropy = K.log(action_prob) * discounted_rewards
-        loss = -K.sum(cross_entropy)
-
-        # create training function
-        optimizer = Adam(learning_rate=self.learning_rate)
-        updates = optimizer.get_updates(self.model.trainable_weights, [],
-                                        loss)
-        train = K.function([self.model.input, action, discounted_rewards], [],
-                           updates=updates)
-
-        return train
 
     # get action from policy network
     def get_action(self, state):
@@ -79,13 +61,28 @@ class ReinforceAgent:
         act[action] = 1
         self.actions.append(act)
 
-    # update policy neural network
+    # update policy neural network using TF2 GradientTape
     def train_model(self):
         discounted_rewards = np.float32(self.discount_rewards(self.rewards))
         discounted_rewards -= np.mean(discounted_rewards)
         discounted_rewards /= np.std(discounted_rewards)
 
-        self.optimizer([self.states, self.actions, discounted_rewards])
+        states = np.array(self.states)
+        actions = np.array(self.actions)
+
+        with tf.GradientTape() as tape:
+            # Forward pass
+            policy = self.model(states, training=True)
+            # Calculate action probabilities
+            action_prob = tf.reduce_sum(actions * policy, axis=1)
+            # Calculate loss (policy gradient)
+            cross_entropy = tf.math.log(action_prob + 1e-10) * discounted_rewards
+            loss = -tf.reduce_sum(cross_entropy)
+
+        # Backward pass
+        gradients = tape.gradient(loss, self.model.trainable_variables)
+        self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
+
         self.states, self.actions, self.rewards = [], [], []
 
 
